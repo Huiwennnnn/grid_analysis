@@ -60,12 +60,12 @@ def build_MV_LV_net(MV_case_id):
 
     net=pypsa.Network()
     for index,node in MV_nodes.iterrows():
-        net.add("Bus",name=f"{MV_case_id}_node_{node['osmid']}",v_nom=20,x=node['x'],y=node['y'],carrier='AC')#v_mag_pu_max=1.03,v_mag_pu_min=0.97
+        net.add("Bus",name=f"{MV_case_id}_node_{node['osmid']}",v_nom=20,x=node['x'],y=node['y'],carrier='AC',v_mag_pu_max=1.02) #,v_mag_pu_min=0.98
         # Place holder for base load
         # MV consumer
         if (node['consumers']==True) and (node['lv_grid']=='-1'):
             net.add("Load",name=f"base_load_{MV_case_id}_{node['osmid']}",bus=f"{MV_case_id}_node_{node['osmid']}",p_set=node['el_dmd'],q_set=get_Q(node['el_dmd'],MV_pf))
-        # Connvected to LV consumers
+        # Connected to LV consumers
         if (node['consumers']==True) and (node['lv_grid']!='-1'):
             LV_case_id = node['lv_grid']
             LV_zone = LV_zone_dict[node['lv_grid']]
@@ -75,10 +75,10 @@ def build_MV_LV_net(MV_case_id):
         if node['source']:
             net.add("Bus",name=f"HV_bus_{MV_case_id}_{node['osmid']}",v_nom=110)
             HV_bus_name = f"HV_bus_{MV_case_id}_{node['osmid']}"
-            net.add("Transformer",name=f"HV_{MV_case_id}_{node['osmid']}",bus0=f"HV_bus_{MV_case_id}_{node['osmid']}",bus1=f"{MV_case_id}_node_{node['osmid']}",type=MV_zone_trafo['trafo_type'])
-    net.add("Generator",name=f"External_grid_{MV_case_id}",bus=HV_bus_name,control="Slack")
+            net.add("Transformer",name=f"HV_{MV_case_id}_{node['osmid']}",bus0=f"HV_bus_{MV_case_id}_{node['osmid']}",bus1=f"{MV_case_id}_node_{node['osmid']}",type=MV_zone_trafo['trafo_type'],s_max_pu=2)
+    net.add("Generator",name=f"External_grid_{MV_case_id}",bus=HV_bus_name,p_nom=100000,control="slack")
     for index,edge in MV_edges.iterrows():
-        net.add("Line",name=f"{MV_case_id}_{edge['u']}_{edge['v']}",bus0=f"{MV_case_id}_node_{edge['u']}",bus1=f"{MV_case_id}_node_{edge['v']}",r=edge['r'],x=edge['x'],s_nom=edge['s_nom'],b=edge['b'],s_nom_extendable=True)
+        net.add("Line",name=f"{MV_case_id}_{edge['u']}_{edge['v']}",bus0=f"{MV_case_id}_node_{edge['u']}",bus1=f"{MV_case_id}_node_{edge['v']}",r=edge['r'],x=edge['x'],s_nom=edge['s_nom'],b=edge['b'],s_max_pu=1)#p_set=[0*p/1000 for p in pv_profile['pv_P_daily']]
     print(f"Finish building MV {MV_case_id}")
     return net
 
@@ -92,7 +92,7 @@ def build_LV_net(case_id,zone=None,net=None,resp_MV=None):
     # Line types
     if zone.endswith('Urban'):
         LV_zone_line = {"line_type": "NAYY 4x240 SE", "line_type_in_lib": False, "r_ohm_per_km": 0.125,
-                        "x_ohm_per_km": 0.08, "c_nf_per_km": 260, "g_us_per_km": 81.995568, "max_i_ka": 0.364, "type": "cs"} # c_nf_per_km not correct
+                        "x_ohm_per_km": 0.08, "c_nf_per_km": 260, "g_us_per_km": 81.995568, "max_i_ka": 0.364, "type": "cs"}
     else:
         LV_zone_line = {"line_type": "NAYY 4x150 SE", "line_type_in_lib": True,"r_ohm_per_km": 0.208,
                         "x_ohm_per_km": 0.08, "c_nf_per_km": 261, "g_us_per_km": 81.995568, "max_i_ka": 0.27, "type": "cs"}
@@ -122,7 +122,7 @@ def build_LV_net(case_id,zone=None,net=None,resp_MV=None):
     for index, node in grid_nodes.iterrows():
         resp_MV_case_id,resp_MV_osmid=str(resp_MV['MV_case_id'].iloc[0]),str(resp_MV['osmid'].iloc[0])
         # Add bus
-        net.add("Bus",name=f"{case_id}_node_{node['osmid']}",v_nom=0.4,x=node['x'],y=node['y'],carrier='AC')#v_mag_pu_max=1.03,v_mag_pu_min=0.97
+        net.add("Bus",name=f"{case_id}_node_{node['osmid']}",v_nom=0.4,x=node['x'],y=node['y'],carrier='AC',v_mag_pu_max=1.03) #,v_mag_pu_min=0.97
         # Placeholder for base load
         if node['consumers']==True:
             net.add("Load",name=f"base_load_{case_id}_{node['osmid']}",bus=f"{case_id}_node_{node['osmid']}",p_set=node['el_dmd'],q_set=get_Q(node['el_dmd'],LV_pf))
@@ -131,14 +131,14 @@ def build_LV_net(case_id,zone=None,net=None,resp_MV=None):
         if node['source']:
             if not expand:
                 net.add("Bus",name=f"{resp_MV_case_id}_node_{resp_MV_osmid}",v_nom=20,x=resp_MV['x'].iloc[0],y=resp_MV['y'].iloc[0])
-            net.add("Transformer",name=f"{resp_MV_case_id}_{case_id}_{node['osmid']}",bus0=f"{resp_MV_case_id}_node_{resp_MV_osmid}",bus1=f"{case_id}_node_{node['osmid']}",type=LV_zone_trafo['trafo_type'])
+            net.add("Transformer",name=f"{resp_MV_case_id}_{case_id}_{node['osmid']}",bus0=f"{resp_MV_case_id}_node_{resp_MV_osmid}",bus1=f"{case_id}_node_{node['osmid']}",type=LV_zone_trafo['trafo_type'],s_max_pu=2)#,s_nom_extendable=True
     
     # Add external network
     if not expand:
-        net.add("Generator",name=f'External_grid_{case_id}',bus=f"{resp_MV_case_id}_node_{resp_MV_osmid}",control="Slack")
+        net.add("Generator",name=f'External_grid_{case_id}',bus=f"{resp_MV_case_id}_node_{resp_MV_osmid}",p_nom=100000,control="slack")
         
     for index, edge in grid_edges.iterrows():
-        net.add("Line",name=f"{case_id}_{edge['u']}_{edge['v']}",bus0=f"{case_id}_node_{edge['u']}",bus1=f"{case_id}_node_{edge['v']}",r=edge['r'],x=edge['x'],s_nom=edge['s_nom'],b=edge['b'],s_nom_extendable=True)
+        net.add("Line",name=f"{case_id}_{edge['u']}_{edge['v']}",bus0=f"{case_id}_node_{edge['u']}",bus1=f"{case_id}_node_{edge['v']}",r=edge['r'],x=edge['x'],s_nom=edge['s_nom'],b=edge['b'],s_max_pu=1)#,s_nom_extendable=True
     
     print(f"Finish building LV {case_id}")
     return net
@@ -160,8 +160,7 @@ def get_net_boundary(net, buffer=50, ratio=0.5,save=False,case_id=None): # Winte
 
 # EV functions
 def get_lv_consumer_bus(net):
-    lv_consumer_bus = net.buses.loc[
-        net.buses.index.isin(net.loads.loc[net.loads.index.str.contains("base")].bus) & (net.buses.v_nom == 0.4)]
+    lv_consumer_bus = net.buses.loc[net.buses.index.isin(net.loads.loc[net.loads.index.str.contains("base")].bus) & (net.buses.v_nom == 0.4)]
     lv_consumer_bus_gdf = gpd.GeoDataFrame(lv_consumer_bus.index,
                                            geometry=gpd.points_from_xy(x=lv_consumer_bus.x, y=lv_consumer_bus.y),
                                            crs="epsg:4326")
@@ -198,17 +197,17 @@ def add_ev_profile(net,path,grid,day_start_ts,monitor_hr,scenario_year):
     """
     Plot mapping result
     """
-    fig, ax = plt.subplots(figsize=(20,20))
-    emob_assigned['geometry'].plot(ax=ax,marker='x',color='blue',markersize=3)
-    emob_assigned['bus_geometry'].plot(ax=ax, marker='o', color='red', markersize=3)
-    emob_assigned['map_bus'].plot(ax=ax,color='green')
-    plt.show()
+    # fig, ax = plt.subplots(figsize=(20,20))
+    # emob_assigned['geometry'].plot(ax=ax,marker='x',color='blue',markersize=3)
+    # emob_assigned['bus_geometry'].plot(ax=ax, marker='o', color='red', markersize=3)
+    # emob_assigned['map_bus'].plot(ax=ax,color='green')
+    # plt.show()
 
 
     ev_load = emob_assigned.copy().drop(columns=['geometry','bus_geometry','map_bus'],axis=1)
     for index,ev_profile in ev_load.iterrows():
         if ev_profile['process_cnt']!=0: # Only add ev profiles with charge/discharge actions
-            net.add("Load",name=f"ev_{ev_profile['person']}_{index}",bus=f"{ev_profile['Bus']}",p_set=[p/1000 for p in ev_profile['optimized_power_list']],q_set=[p/1000*np.tan(np.arccos(LV_pf)) for p in ev_profile['optimized_power_list']])
+            net.add("Load",name=f"ev_{ev_profile['person']}_{index}_{ev_profile['Bus']}_{ev_profile['distance']}",bus=f"{ev_profile['Bus']}",p_set=[p/1000 for p in ev_profile['optimized_power_list']],q_set=[p/1000*np.tan(np.arccos(LV_pf)) for p in ev_profile['optimized_power_list']])
     return net
 
 
@@ -255,3 +254,36 @@ def add_base_load(net,day_start_ts,monitor_hr):
     return net
 
 # PV Generation
+def load_pv_profile(day_start_ts):
+    pv_install = pd.read_json(f"/Users/huiwen/Library/Mobile Documents/com~apple~CloudDocs/Thesis/Load_demand/PV/369_0_PV_powerlist_max_P.json") # power in kW
+    doy = day_start_ts.day_of_year
+    def get_day_pv_profile(yearly,doy):
+        return yearly[doy]
+    pv_install['pv_P_daily'] = pv_install['pv_P_daily'].apply(get_day_pv_profile,doy=doy)
+    pv_install_gdf = gpd.GeoDataFrame(pv_install,geometry=gpd.points_from_xy(x=pv_install.XCOORD,y=pv_install.YCOORD),crs="epsg:2056")
+    return pv_install_gdf
+
+def add_pv_profile(net,day_start_ts):
+    pv_gdf=load_pv_profile(day_start_ts)
+    lv_consumer_bus_gdf = get_lv_consumer_bus(net)
+    pv_assigned = gpd.sjoin_nearest(pv_gdf, lv_consumer_bus_gdf, how='left', max_distance=50, distance_col="distance") # Assign PV profile only to LV nodes
+    pv_assigned = pv_assigned.loc[~pd.isnull(pv_assigned.index_right)] #filter for successfully mapped PV
+    pv_assigned.rename(columns={"index_right":"Bus"},inplace=True)
+    pv_assigned['bus_geometry'] = pv_assigned['Bus'].map(lv_consumer_bus_gdf['geometry']) 
+    # create PV bus connection string geoemtry
+    pv_assigned['map_bus'] = pv_assigned.apply(lambda row:LineString([row['geometry'], row['bus_geometry']]),axis=1)
+
+    """
+    Plot mapping result
+    """
+    # fig, ax = plt.subplots(figsize=(20,20))
+    # pv_assigned['geometry'].plot(ax=ax,marker='x',color='blue',markersize=3)
+    # pv_assigned['bus_geometry'].plot(ax=ax, marker='o', color='red', markersize=3)
+    # pv_assigned['map_bus'].plot(ax=ax,color='green')
+    # plt.show()
+
+    pv_gen = pv_assigned.copy().drop(columns=['geometry','bus_geometry','map_bus'],axis=1)
+    for index,pv_profile in pv_gen.iterrows():
+        net.add("Generator",name=f"PV_{pv_profile['Bus']}_{index}",bus=pv_profile['Bus'],control='PV',p_nom=pv_profile['max_P']/1000,p_min_pu=[0]*24,p_max_pu=[p/pv_profile['max_P'] for p in pv_profile['pv_P_daily']],p_set=[p/1000 for p in pv_profile['pv_P_daily']],carrier='solar',marginal_cost=-1) #,
+
+    return net

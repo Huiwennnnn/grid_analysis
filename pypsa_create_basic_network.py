@@ -8,7 +8,7 @@ from shapely.geometry import Point,LineString
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-
+np.random.seed(42)
 
 def read_LV_zone_dict():
     # Data Processing
@@ -41,7 +41,7 @@ def get_Q(P, pf):
         Q = -Q
     return Q
 
-def build_MV_LV_net(MV_case_id):
+def build_MV_LV_net(MV_case_id,override_components=None,override_component_attrs=None):
     HV_bus_name = ""
     LV_zone_dict=read_LV_zone_dict()
     MV_nodes_all = read_MV_nodes_all()
@@ -58,7 +58,10 @@ def build_MV_LV_net(MV_case_id):
     MV_nodes=MV_nodes.to_crs(epsg=4326)
     MV_nodes['x'],MV_nodes['y']=MV_nodes.geometry.x,MV_nodes.geometry.y
 
-    net=pypsa.Network()
+    net = pypsa.Network(
+        override_components=override_components,
+        override_component_attrs=override_component_attrs,
+    )
     for index,node in MV_nodes.iterrows():
         net.add("Bus",name=f"{MV_case_id}_node_{node['osmid']}",v_nom=20,x=node['x'],y=node['y'],carrier='AC',v_mag_pu_max=1.02) #,v_mag_pu_min=0.98
         # Place holder for base load
@@ -75,15 +78,15 @@ def build_MV_LV_net(MV_case_id):
         if node['source']:
             net.add("Bus",name=f"HV_bus_{MV_case_id}_{node['osmid']}",v_nom=110)
             HV_bus_name = f"HV_bus_{MV_case_id}_{node['osmid']}"
-            net.add("Transformer",name=f"HV_{MV_case_id}_{node['osmid']}",bus0=f"HV_bus_{MV_case_id}_{node['osmid']}",bus1=f"{MV_case_id}_node_{node['osmid']}",type=MV_zone_trafo['trafo_type'],s_max_pu=2)
-    net.add("Generator",name=f"External_grid_{MV_case_id}",bus=HV_bus_name,p_nom=100000,control="slack")
+            net.add("Transformer",name=f"HV_{MV_case_id}_{node['osmid']}",bus0=f"HV_bus_{MV_case_id}_{node['osmid']}",bus1=f"{MV_case_id}_node_{node['osmid']}",type=MV_zone_trafo['trafo_type'],s_max_pu=1)
+    # net.add("Generator",name=f"External_grid_{MV_case_id}",bus=HV_bus_name,p_nom=10000,control="slack")
     for index,edge in MV_edges.iterrows():
         net.add("Line",name=f"{MV_case_id}_{edge['u']}_{edge['v']}",bus0=f"{MV_case_id}_node_{edge['u']}",bus1=f"{MV_case_id}_node_{edge['v']}",r=edge['r'],x=edge['x'],s_nom=edge['s_nom'],b=edge['b'],s_max_pu=1)#p_set=[0*p/1000 for p in pv_profile['pv_P_daily']]
     print(f"Finish building MV {MV_case_id}")
     return net
 
 
-def build_LV_net(case_id,zone=None,net=None,resp_MV=None):
+def build_LV_net(case_id,zone=None,net=None,resp_MV=None,override_components=None,override_component_attrs=None):
     if zone is None:
         LV_zone_dict=read_LV_zone_dict()
         zone = LV_zone_dict[case_id]
@@ -114,7 +117,10 @@ def build_LV_net(case_id,zone=None,net=None,resp_MV=None):
     grid_nodes['y'] = grid_nodes.geometry.y
 
     if not expand:
-        net = pypsa.Network()
+        net = pypsa.Network(
+            override_components=override_components,
+            override_component_attrs=override_component_attrs,
+        )
         MV_nodes_all = read_MV_nodes_all()
         resp_MV = MV_nodes_all[MV_nodes_all['lv_grid'] == case_id]
     else:
@@ -131,11 +137,11 @@ def build_LV_net(case_id,zone=None,net=None,resp_MV=None):
         if node['source']:
             if not expand:
                 net.add("Bus",name=f"{resp_MV_case_id}_node_{resp_MV_osmid}",v_nom=20,x=resp_MV['x'].iloc[0],y=resp_MV['y'].iloc[0])
-            net.add("Transformer",name=f"{resp_MV_case_id}_{case_id}_{node['osmid']}",bus0=f"{resp_MV_case_id}_node_{resp_MV_osmid}",bus1=f"{case_id}_node_{node['osmid']}",type=LV_zone_trafo['trafo_type'],s_max_pu=2)#,s_nom_extendable=True
+            net.add("Transformer",name=f"{resp_MV_case_id}_{case_id}_{node['osmid']}",bus0=f"{resp_MV_case_id}_node_{resp_MV_osmid}",bus1=f"{case_id}_node_{node['osmid']}",type=LV_zone_trafo['trafo_type'],s_max_pu=1)#,s_nom_extendable=True
     
     # Add external network
-    if not expand:
-        net.add("Generator",name=f'External_grid_{case_id}',bus=f"{resp_MV_case_id}_node_{resp_MV_osmid}",p_nom=100000,control="slack")
+    # if not expand:
+    #     net.add("Generator",name=f'External_grid_{case_id}',bus=f"{resp_MV_case_id}_node_{resp_MV_osmid}",p_nom=10000,control="slack")
         
     for index, edge in grid_edges.iterrows():
         net.add("Line",name=f"{case_id}_{edge['u']}_{edge['v']}",bus0=f"{case_id}_node_{edge['u']}",bus1=f"{case_id}_node_{edge['v']}",r=edge['r'],x=edge['x'],s_nom=edge['s_nom'],b=edge['b'],s_max_pu=1)#,s_nom_extendable=True
@@ -284,6 +290,14 @@ def add_pv_profile(net,day_start_ts):
 
     pv_gen = pv_assigned.copy().drop(columns=['geometry','bus_geometry','map_bus'],axis=1)
     for index,pv_profile in pv_gen.iterrows():
-        net.add("Generator",name=f"PV_{pv_profile['Bus']}_{index}",bus=pv_profile['Bus'],control='PV',p_nom=pv_profile['max_P']/1000,p_min_pu=[0]*24,p_max_pu=[p/pv_profile['max_P'] for p in pv_profile['pv_P_daily']],p_set=[p/1000 for p in pv_profile['pv_P_daily']],carrier='solar',marginal_cost=-1) #,
+        net.add("Generator",name=f"PV_{pv_profile['Bus']}_{index}",
+                bus=pv_profile['Bus'],
+                control='PQ',
+                p_nom=pv_profile['max_P']/1000,
+                p_min_pu=[0]*24,
+                p_max_pu=[p/pv_profile['max_P'] for p in pv_profile['pv_P_daily']],
+                p_set=[p/1000 for p in pv_profile['pv_P_daily']],
+                carrier='solar',
+                marginal_cost=-1)
 
     return net

@@ -445,9 +445,6 @@ def add_pv_profile(net, day_start_ts):
     return net
 
 
-
-
-
 # def add_pv_profile(net, day_start_ts):
 #     """
 #     add PV capacity <70 kW to LV grid, other to MV grid

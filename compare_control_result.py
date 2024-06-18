@@ -4,6 +4,7 @@ import pypsa_create_basic_network as basic
 import pypsa_pf_stat as psastat
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
@@ -11,18 +12,18 @@ warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 """
 Basic Settings for Data Input and Output
 """
-MV_feeder=True
+MV_feeder=False
 grid = "369_0"
 folder = '39-1_0_4'
 scenario_year = 2050
-weekday = "Friday"
-day_start_ts = pd.to_datetime(f"{scenario_year}-01-07 00:00:00")
+weekday = "Sunday"
+day_start_ts = pd.to_datetime(f"{scenario_year}-07-10 00:00:00")
 day_start = day_start_ts.day
-day_end_ts = pd.to_datetime(f"{scenario_year}-01-08 00:00:00")
+day_end_ts = pd.to_datetime(f"{scenario_year}-07-11 00:00:00")
 month = day_start_ts.month
 monitor_hr = int((day_end_ts - day_start_ts).total_seconds()/3600)
-path_controlled = f"{grid}/{scenario_year}_{weekday}_01_07_controlled"
-path_uncontrolled = f"{grid}/{scenario_year}_{weekday}_01_07_uncontrolled"
+path_controlled = f"{grid}/{scenario_year}_{weekday}_07_10_controlled"
+path_uncontrolled = f"{grid}/{scenario_year}_{weekday}_07_10_uncontrolled"
 lv_pf = 0.97
 mv_pf = 0.9
 experiment = 'compare_control'

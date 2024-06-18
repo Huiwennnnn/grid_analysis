@@ -37,7 +37,7 @@ def pf_line_overloading_stat(net):
 
 
 def opt_trafo_loading(net):
-    return net.transformers_t.p0 / net.transformers.s_nom * 100
+    return abs(net.transformers_t.p0) / net.transformers.s_nom * 100
 
 
 def opt_trafo_overloading_stat(net):

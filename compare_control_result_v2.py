@@ -17,32 +17,33 @@ warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 """
 Basic Settings for Data Input and Output
 """
-LV_list = ['211-1_0_4', '39-1_1_2', '214-1_0_2', '227-10_0_6',
-           '214-1_1_5', '216-2_1_3', '214-1_2_2', '216-2_0_2', '216-1_1_3',
-           '216-1_2_4', '216-3_0_5', '39-1_0_4', '225-2_0_3', '225-4_0_3',
-           '225-1_0_6', '225-2_1_5', '225-3_0_6', '298-1_1_4', '298-4_0_2',
-           '225-5_0_5', '230-106_0_2', '298-2_0_5', '298-7_1_3', '298-7_0_3',
-           '298-5_0_5', '298-6_0_2','298-3_0_3', '298-8_0_7', '227-12_0_5',
-           '227-7_0_5', '227-10_1_3', '227-11_0_4', '230-150_0_2',
-           '227-9_0_5', '230-202_0_2', '230-180_0_4', '230-197_0_5',
-           '230-200_0_4', '230-202_1_3', '230-201_0_6', '230-211_0_2',
-           '230-212_0_3', '230-212_1_3', '230-108_0_6', '227-13_0_3',
-           '227-14_0_4', '227-8_0_10', '227-13_1_3', '227-1_0_5', '227-6_1_4',
-           '227-3_0_5', '298-9_0_5', '298-6_1_4', '298-4_1_5']
+
+# LV_list = ['211-1_0_4', '39-1_1_2', '214-1_0_2', '227-10_0_6',
+#            '214-1_1_5', '216-2_1_3', '214-1_2_2', '216-2_0_2', '216-1_1_3',
+#            '216-1_2_4', '216-3_0_5', '39-1_0_4', '225-2_0_3', '225-4_0_3',
+#            '225-1_0_6', '225-2_1_5', '225-3_0_6', '298-1_1_4', '298-4_0_2',
+#            '225-5_0_5', '230-106_0_2', '298-2_0_5', '298-7_1_3', '298-7_0_3',
+#            '298-5_0_5', '298-6_0_2','298-3_0_3', '298-8_0_7', '227-12_0_5',
+#            '227-7_0_5', '227-10_1_3', '227-11_0_4', '230-150_0_2',
+#            '227-9_0_5', '230-202_0_2', '230-180_0_4', '230-197_0_5',
+#            '230-200_0_4', '230-202_1_3', '230-201_0_6', '230-211_0_2',
+#            '230-212_0_3', '230-212_1_3', '230-108_0_6', '227-13_0_3',
+#            '227-14_0_4', '227-8_0_10', '227-13_1_3', '227-1_0_5', '227-6_1_4',
+#            '227-3_0_5', '298-9_0_5', '298-6_1_4', '298-4_1_5']
 
 
-MV_feeder = True
+MV_feeder = False
 grid = "369_0"
-# folder = '298-4_1_5'
+folder = '230-212_1_3'
 scenario_year = 2050
 weekday = "Friday"
-day_start_ts = pd.to_datetime(f"{scenario_year}-01-07 00:00:00")
+day_start_ts = pd.to_datetime(f"{scenario_year}-07-08 00:00:00")
 day_start = day_start_ts.day
-day_end_ts = pd.to_datetime(f"{scenario_year}-01-08 00:00:00")
+day_end_ts = pd.to_datetime(f"{scenario_year}-07-09 00:00:00")
 # month = day_start_ts.month
 monitor_hr = int((day_end_ts - day_start_ts).total_seconds() / 3600)
-path_controlled = f"{grid}/{scenario_year}_{weekday}_01_07_controlled"
-path_uncontrolled = f"{grid}/{scenario_year}_{weekday}_01_07_uncontrolled"
+path_controlled = f"{grid}/{scenario_year}_{weekday}_07_08_controlled"
+path_uncontrolled = f"{grid}/{scenario_year}_{weekday}_07_08_uncontrolled"
 lv_pf = 0.97
 mv_pf = 0.9
 experiment = 'compare_control'
@@ -70,41 +71,43 @@ def make_save_path(MV_feeder, path_controlled, path_uncontrolled, folder=None, e
     return save_path_controlled, save_path_uncontrolled
 
 
-def build_and_pf(MV_feeder, folder, grid, day_start_ts, monitor_hr, scenario_year):
+def build_networks(MV_feeder, folder, grid, day_start_ts, monitor_hr, scenario_year):
     if MV_feeder:
         net = basic.build_MV_LV_net(MV_case_id=grid);
     else:
         net = basic.build_LV_net(case_id=folder);
 
     net_base = basic.add_base_load(net, day_start_ts, monitor_hr);
-    net_pv = basic.add_pv_profile(net_base, day_start_ts);
+    net_hp = basic.add_hp_profile(net_base.copy(),day_start_ts);
+    net_pv = basic.add_pv_profile(net_hp.copy(), day_start_ts);
     net_controlled = basic.add_ev_profile(net_pv.copy(), path_controlled, grid, day_start_ts, monitor_hr, scenario_year)
     net_uncontrolled = basic.add_ev_profile(net_pv.copy(), path_uncontrolled, grid, day_start_ts, monitor_hr,
                                             scenario_year)
+
     net_controlled.lpf()
     net_controlled.pf(use_seed=True)
     net_uncontrolled.lpf()
     net_uncontrolled.pf(use_seed=True)
+    return net_controlled, net_uncontrolled, net_base, net_hp,net_pv
 
-    return net_controlled, net_uncontrolled
 
-
-def plot_profiles(nets, save_paths):
-    for i in range(2):
-        base_load_idx = nets[i].loads.loc[nets[i].loads.index.str.contains('base')].index
-        ev_load_idx = nets[i].loads.loc[nets[i].loads.index.str.contains('ev')].index
-        pv_gen_idx = nets[i].generators.loc[nets[i].generators.index.str.contains('PV')].index
-        plt.subplots(figsize=(10, 6))
-        plt.plot(nets[i].loads_t.p_set[base_load_idx].sum(axis=1), label='building base')
-        plt.plot(nets[i].loads_t.p_set[ev_load_idx][nets[i].loads_t.p_set[ev_load_idx] >= 0].sum(axis=1),
-                 label='ev charge')
-        plt.plot(-nets[i].loads_t.p_set[ev_load_idx][nets[i].loads_t.p_set[ev_load_idx] < 0].sum(axis=1),
-                 label='ev discharge')
-        plt.plot(nets[i].generators_t.p[pv_gen_idx].sum(axis=1), label='PV')
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(f"{save_paths[i]}/network_profiles.png")
-        plt.clf()
+def plot_profiles(net, save_path):
+    base_load_idx = net.loads.loc[net.loads.index.str.contains('base')].index
+    hp_load_idx = net.loads.loc[net.loads.index.str.contains('hp_load')].index
+    ev_load_idx = net.loads.loc[net.loads.index.str.contains('ev')].index
+    pv_gen_idx = net.generators.loc[net.generators.index.str.contains('PV')].index
+    plt.subplots(figsize=(10, 6))
+    plt.plot(net.loads_t.p_set[base_load_idx].sum(axis=1), label='building base')
+    plt.plot(net.loads_t.p_set[hp_load_idx].sum(axis=1), label='heatpump')
+    plt.plot(net.loads_t.p_set[ev_load_idx][net.loads_t.p_set[ev_load_idx] >= 0].sum(axis=1),
+                label='ev charge')
+    plt.plot(-net.loads_t.p_set[ev_load_idx][net.loads_t.p_set[ev_load_idx] < 0].sum(axis=1),
+                label='ev discharge')
+    plt.plot(net.generators_t.p_set[pv_gen_idx].sum(axis=1), label='PV')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f"{save_path}/network_profiles.png")
+    plt.clf()
     return 0
 
 
@@ -119,9 +122,11 @@ def create_compare_plots(nets, save_paths):
     trafo_uncontrolled = psastat.pf_trafo_loading(nets[1])
     trafo_stat_uncontrolled = psastat.pf_trafo_overloading_stat(nets[1])
 
-    voltage_controlled = nets[0].buses_t.v_mag_pu
+    non_slack_controlled = nets[0].buses.loc[nets[0].buses.control != 'Slack'].index
+    non_slack_uncontrolled = nets[1].buses.loc[nets[1].buses.control != 'Slack'].index
+    voltage_controlled = nets[0].buses_t.v_mag_pu[non_slack_controlled]
     voltage_stat_controlled = psastat.pf_undervoltage(nets[0])
-    voltage_uncontrolled = nets[1].buses_t.v_mag_pu
+    voltage_uncontrolled = nets[1].buses_t.v_mag_pu[non_slack_uncontrolled]
     voltage_stat_uncontrolled = psastat.pf_undervoltage(nets[1])
 
     """
@@ -134,10 +139,8 @@ def create_compare_plots(nets, save_paths):
     positions1 = np.arange(1, n + 1)
     positions2 = positions1 + 0.4  # Adjust the shift as needed
 
-    box1 = ax.boxplot(line_controlled.T.values, vert=True, positions=positions1, patch_artist=True, widths=0.3,
-                      whis=[0, 100])
-    box2 = ax.boxplot(line_uncontrolled.T.values, vert=True, positions=positions2, patch_artist=True, widths=0.3,
-                      whis=[0, 100])
+    box1 = ax.boxplot(line_controlled.T.values, vert=True, positions=positions1, patch_artist=True, widths=0.3)
+    box2 = ax.boxplot(line_uncontrolled.T.values, vert=True, positions=positions2, patch_artist=True, widths=0.3)
     # Set the title and labels
     ax.set_title("Line Loading Percentage")
     ax.set_ylim([-5, max(line_controlled.max().max(), line_uncontrolled.max().max())])
@@ -185,10 +188,8 @@ def create_compare_plots(nets, save_paths):
     positions1 = np.arange(1, n + 1)
     positions2 = positions1 + 0.4  # Adjust the shift as needed
 
-    box1 = ax.boxplot(trafo_controlled.T.values, vert=True, positions=positions1, patch_artist=True, widths=0.3,
-                      whis=[0, 100])
-    box2 = ax.boxplot(trafo_uncontrolled.T.values, vert=True, positions=positions2, patch_artist=True, widths=0.3,
-                      whis=[0, 100])
+    box1 = ax.boxplot(trafo_controlled.T.values, vert=True, positions=positions1, patch_artist=True, widths=0.3)
+    box2 = ax.boxplot(trafo_uncontrolled.T.values, vert=True, positions=positions2, patch_artist=True, widths=0.3)
     # Set the title and labels
     ax.set_title("Transformer Loading Percentage")
     ax.set_ylim([-5, max(trafo_controlled.max().max(), trafo_uncontrolled.max().max())])
@@ -204,6 +205,14 @@ def create_compare_plots(nets, save_paths):
     for bplot, color in zip([box1, box2], colors):
         for patch in bplot['boxes']:
             patch.set_facecolor(color)
+        for whisker in bplot['whiskers']:
+            whisker.set_color(color)
+        for cap in bplot['caps']:
+            cap.set_color(color)
+        for median in bplot['medians']:
+            median.set_color(color)
+        for flier in bplot['fliers']:
+            flier.set_markerfacecolor(color)
 
     # Create custom legend handles
     legend_labels = ['Controlled', 'Uncontrolled']
@@ -235,10 +244,8 @@ def create_compare_plots(nets, save_paths):
     positions1 = np.arange(1, n + 1)
     positions2 = positions1 + 0.4  # Adjust the shift as needed
 
-    box1 = ax.boxplot(voltage_controlled.T.values, vert=True, positions=positions1, patch_artist=True, widths=0.3,
-                      whis=[0, 100])
-    box2 = ax.boxplot(voltage_uncontrolled.T.values, vert=True, positions=positions2, patch_artist=True, widths=0.3,
-                      whis=[0, 100])
+    box1 = ax.boxplot(voltage_controlled.T.values, vert=True, positions=positions1, patch_artist=True, widths=0.3)
+    box2 = ax.boxplot(voltage_uncontrolled.T.values, vert=True, positions=positions2, patch_artist=True, widths=0.3)
     # Set the title and labels
     ax.set_title("Bus Voltage Magnitude")
     ax.set_ylim([0.98 * min(voltage_controlled.min().min(), voltage_uncontrolled.min().min()),
@@ -304,6 +311,8 @@ def hourly_visualize(MV_feeder,nets, save_paths, loading_res):
             voltage_load = loading_res['voltage_uncontrolled']
             trafo_load = loading_res['trafo_uncontrolled']
 
+
+        reference_table = []
         for sns in nets[i].snapshots[0:24]:
             fig, ax = plt.subplots(subplot_kw={"projection": ccrs.EqualEarth()}, figsize=(20, 20))
             loads = nets[i].loads.assign(l=nets[i].loads_t.p.loc[sns]).groupby(["bus"]).l.sum()
@@ -318,13 +327,14 @@ def hourly_visualize(MV_feeder,nets, save_paths, loading_res):
                     sns] ** 2) / nets[i].transformers.s_nom * 100
             collection = nets[i].plot(
                 bus_sizes=abs(net_load/5e6),  # proportional to net loading
-                bus_colors=nets[i].buses_t.v_mag_pu.loc[sns],  # proportional to v_mag_pu
+                bus_colors=voltage_load.loc[sns],#nets[i].buses_t.v_mag_pu.loc[sns],  # proportional to v_mag_pu
                 bus_cmap=plt.cm.jet_r,
-                bus_alpha=1,
+                bus_alpha=0.7,
                 margin=0.05,
                 line_widths=1,  # net_controlled.lines_t.p0.max().max(),
                 line_colors=line_loading,
                 line_cmap=plt.cm.jet,
+                line_alpha=0.7,
                 transformer_colors=trafo_loading,  # 'Black',
                 transformer_widths=10,  # net_controlled.transformers_t.p0.loc[sns],
                 transformer_alpha=0.5,
@@ -332,44 +342,73 @@ def hourly_visualize(MV_feeder,nets, save_paths, loading_res):
                 projection=ccrs.EqualEarth(),
                 color_geomap=True,
                 title= str(sns) if MV_feeder else str(sns) + "  " + f"{folder}",
-                jitter=5
+                jitter=10
             )
 
-            bussm = plt.cm.ScalarMappable(cmap=plt.cm.jet_r, norm=mcolors.Normalize(vmin=voltage_load.min().min(),
-                                                                                    vmax=voltage_load.max().max()))
-            bussm.set_array([])
-            linesm = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=mcolors.Normalize(vmin=line_load.min().min(),
-                                                                                   vmax=line_load.max().max()))
-            linesm.set_array([])
+            # # Add node index annotations
+            # if not MV_feeder:
+            #     offset = 1e-5
+            #     j=0
+            #     for idx, bus in nets[i].buses.iterrows():
+            #         unique_id = j+1  # Unique identifier, starting from 1
+                    
+            #         if sns==nets[i].snapshots[0]:
+            #             reference_table.append({'ID': unique_id, 'BusName': idx, 'X': bus.x, 'Y': bus.y})
+            #         if nets[i].buses_t.v_mag_pu[idx].loc[sns]>1.1 or nets[i].buses_t.v_mag_pu[idx].loc[sns]<0.95:
+            #             print(unique_id)
+            #             plt.text(bus.x + offset, bus.y + offset, str(unique_id), fontsize=3, ha='left', va='bottom', transform=ccrs.PlateCarree())
+            #         j=j+1
+                
 
+            bussm = plt.cm.ScalarMappable(cmap=plt.cm.jet_r, norm=mcolors.Normalize(vmin=voltage_load.loc[sns].min(),
+                                                                                    vmax=voltage_load.loc[sns].max()))
+            bussm.set_array([])
+            linesm = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=mcolors.Normalize(vmin=line_load.loc[sns].min(),
+                                                                                   vmax=line_load.loc[sns].max()))
+            linesm.set_array([])
             cax = fig.add_axes([ax.get_position().x1-0.01, ax.get_position().y0, 0.01, ax.get_position().height])
             cax2 = fig.add_axes([ax.get_position().x1+0.03, ax.get_position().y0, 0.01, ax.get_position().height])
             plt.colorbar(linesm, cax=cax, label="Line Loading [%]")
             plt.colorbar(bussm, cax=cax2, label="Bus v_mag_pu [-]")
 
             if MV_feeder:
-                trafosm = plt.cm.ScalarMappable(cmap=plt.cm.jet,norm=mcolors.Normalize(vmin=trafo_load.min().min(), vmax=trafo_load.max().max()))
+                trafosm = plt.cm.ScalarMappable(cmap=plt.cm.jet,norm=mcolors.Normalize(vmin=trafo_load.loc[sns].min(), vmax=trafo_load.loc[sns].max()))
                 trafosm.set_array([])
                 cax3 = fig.add_axes([ax.get_position().x1+0.07, ax.get_position().y0,0.01,ax.get_position().height])
                 plt.colorbar(trafosm,cax=cax3,label="Trafo Loading [%]")
 
+
             plt.subplots_adjust(right=0.9)
-            plt.savefig((f"{save_paths[i]}/hourly_visualize_{sns}.png"))
+            plt.savefig(f"{save_paths[i]}/hourly_visualize_{sns}.png")
+            plt.close(fig)
+            plt.clf()
+
+
+        # reference_df = pd.DataFrame(reference_table).set_index('ID')
+        # reference_df.to_csv(f"{save_paths[i]}/node_reference_table.csv", index=True)
 
 
 if __name__ == '__main__':
+    net_name = {0:'controlled',1:'uncontrolled',2:'base',3:'base_hp',4:'base_hp_pv'}
     if MV_feeder:
         save_paths = make_save_path(MV_feeder, path_controlled, path_uncontrolled, None, experiment)
-        nets = build_and_pf(MV_feeder=MV_feeder, folder=None, grid=grid, day_start_ts=day_start_ts,
+        nets = build_networks(MV_feeder=MV_feeder, folder=None, grid=grid, day_start_ts=day_start_ts,
                             monitor_hr=monitor_hr, scenario_year=scenario_year)
-        plot_profiles(nets, save_paths)
+        
+        for i in range(len(nets)):
+            nets[i].export_to_netcdf(f"{save_paths[0]}/{net_name[i]}.nc")
+            if i<2:
+                plot_profiles(nets[i],save_paths[i])
         loading_res = create_compare_plots(nets, save_paths)
         hourly_visualize(MV_feeder, nets, save_paths, loading_res)
     else:
         for folder in LV_list:
             save_paths = make_save_path(MV_feeder, path_controlled, path_uncontrolled, folder, experiment)
-            nets = build_and_pf(MV_feeder=MV_feeder, folder=folder, grid=grid, day_start_ts=day_start_ts,
+            nets = build_networks(MV_feeder=MV_feeder, folder=folder, grid=grid, day_start_ts=day_start_ts,
                                 monitor_hr=monitor_hr, scenario_year=scenario_year)
-            plot_profiles(nets, save_paths)
+            for i in range(len(nets)):
+                nets[i].export_to_netcdf(f"{save_paths[0]}/{net_name[i]}.nc") # Save all intermediate networks
+                if i<2:
+                    plot_profiles(nets[i],save_paths[i])
             loading_res = create_compare_plots(nets, save_paths)
             hourly_visualize(MV_feeder,nets, save_paths, loading_res)
